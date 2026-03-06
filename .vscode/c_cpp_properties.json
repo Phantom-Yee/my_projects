@@ -1,0 +1,28 @@
+{
+    "configurations": [
+        {
+            "browse": {
+                "databaseFilename": "${default}",
+                "limitSymbolsToIncludedHeaders": false
+            },
+            "includePath": [
+                "/opt/ros/noetic/include/**",
+                "${workspaceFolder}/src/full_coverage_path_planner/include/**",
+                "${workspaceFolder}/src/gnss_gridmap/include/**",
+                "/usr/include/**",
+                "${workspaceFolder}/src/data_interaction/include",
+                "${workspaceFolder}/devel/include",
+                "${workspaceFolder}/devel/include",
+                "/usr/include/postgresql",
+                "/opt/ros/noetic/include",
+                "${workspaceFolder}/src/gnss_gridmap/include"
+            ],
+            "name": "ROS",
+            "intelliSenseMode": "gcc-x64",
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "gnu11",
+            "cppStandard": "c++14"
+        }
+    ],
+    "version": 4
+}

@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<launch>
+
+  <node
+    pkg="data_interaction"  
+    type="data_interaction"  
+    name="data_interaction"  
+    required="true" 
+    output="screen"> 
+
+    <param name="robot_radius"     value="2"/>
+    <param name="tool_radius"      value="0"/>
+    <param name="resolution"       value="0.1"/>
+    <param name="division_value"   value="0.2"/>
+    <!--            Path planning will start from here. Input: x, y, z, roll, pitch, yaw (in map frame)-->
+    <param name="start_pose_fixed" value="0 0 0"/>
+    <!-- <param name="start_pose_fixed" value="3.229057 -15.11556 0 0 0"/> -->
+    <!-- <param name="start_pose"       value="3.229057 -15.11556 0 0 0 66.22"/> -->
+    <param name="offset_angel"     value="90"/>
+    <param name="map_file"         value="$(find data_interaction)/../../../txt2pg/begin1.txt"/>
+    <param name="/path_file"        value="$(find data_interaction)/../../../txt2pg/boustrophedon.txt"/>
+    <param name="edgepath_file"    value="$(find data_interaction)/../../../txt2pg/edgepath.txt"/>
+    <param name="jinweidu_file"    value="$(find data_interaction)/../../../txt2pg/1.txt"/>
+    <param name="task_point_file"  value="$(find data_interaction)/../../../txt2pg/task_point.txt"/>
+  </node>
+</launch>
+
