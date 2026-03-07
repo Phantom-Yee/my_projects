@@ -1,2 +1,0 @@
-custom_msgs:data_interaction:full_coverage_path_planner:gnss_gridmap
--DCATKIN_DEVEL_PREFIX=/home/ragen/ros_ws/CCPP_Server_7/devel -DCMAKE_INSTALL_PREFIX=/home/ragen/ros_ws/CCPP_Server_7/install -G Unix Makefiles
