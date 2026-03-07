@@ -694,7 +694,8 @@ std::vector<ContourPoint> generatePolygonBoustrophedonPath(const std::vector<Con
 std::vector<ContourPoint> generateContourSpiralPath(const std::vector<ContourPoint>& polygon, double w, 
                                                     double min_optimization_distance = 0.3, 
                                                     double connection_step_factor = 0.5,
-                                                    double min_layer_area_ratio = 0.1) {
+                                                    double min_layer_area_ratio = 0.1,
+                                                    double narrow_area_threshold = 2.0) {
     std::vector<std::vector<ContourPoint>> contours = generateContours(polygon, w, min_layer_area_ratio);
     
     if (contours.empty()) {
@@ -728,7 +729,15 @@ std::vector<ContourPoint> generateContourSpiralPath(const std::vector<ContourPoi
         const std::vector<ContourPoint>& currContour = contours[layer];
         
         bool isLastLayer = (layer == contours.size() - 1);
-        
+
+        // 窄区域检测：当当前等高线层过于狭小时，切换为 S 弯路径覆盖剩余区域
+        if (isNarrowArea(currContour, w, narrow_area_threshold)) {
+            ROS_INFO("Layer %zu: Narrow area detected! Switching to S-bend path.", layer);
+            std::vector<ContourPoint> sBendPath = generateSBendPath(currContour, w);
+            fullPath.insert(fullPath.end(), sBendPath.begin(), sBendPath.end());
+            break;
+        }
+
         if (isLastLayer) {
             // 最后一层：简单闭合
             std::vector<ContourPoint> layerPath = generateContourPath(currContour, currentActualStartIdx, false, ContourPoint(0,0), -1);

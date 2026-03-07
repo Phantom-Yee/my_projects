@@ -23,8 +23,8 @@ static PoseStamped parametricInterp1(const PoseStamped& p1, const PoseStamped& p
     PoseStamped p;
     p.header.frame_id = p1.header.frame_id;
     p.pose.orientation = p1.pose.orientation;
-    p.pose.position.x = p1.pose.position.x + alpha * (p2.pose.orientation.x - p1.pose.orientation.x);
-    p.pose.position.y = p1.pose.position.y + alpha * (p2.pose.orientation.y - p1.pose.orientation.y);
+    p.pose.position.x = p1.pose.position.x + alpha * (p2.pose.position.x - p1.pose.position.x);
+    p.pose.position.y = p1.pose.position.y + alpha * (p2.pose.position.y - p1.pose.position.y);
     return p;
 }
 
