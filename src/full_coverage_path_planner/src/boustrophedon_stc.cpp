@@ -746,15 +746,63 @@ BoundingRect computeMinBoundingRect(const std::vector<ContourPoint>& polygon) {
 }
 
 // ============================================================
-// 【新增】在外接矩形内生成 S 弯（往复式）路径
-// rect：外接矩形（4角点）
+// 【新增】将水平扫描线（已旋转坐标系）裁剪到多边形内部
+// 返回 [x_min, x_max] 对的列表（多边形内部的线段）
+// rotatedPoly: 旋转坐标系中的多边形顶点
+// y: 扫描线 y 坐标（旋转坐标系）
+// ============================================================
+std::vector<std::pair<double, double>> clipScanlineToPolygon(
+        const std::vector<ContourPoint>& rotatedPoly, double y) {
+
+    std::vector<double> xs;
+    int n = rotatedPoly.size();
+
+    for (int i = 0; i < n; i++) {
+        ContourPoint a = rotatedPoly[i];
+        ContourPoint b = rotatedPoly[(i + 1) % n];
+
+        // 扫描线穿越边的检测（严格单调穿越）
+        if ((a.y <= y && b.y > y) || (b.y <= y && a.y > y)) {
+            if (std::abs(b.y - a.y) > 1e-9) {
+                double x = a.x + (y - a.y) * (b.x - a.x) / (b.y - a.y);
+                xs.push_back(x);
+            }
+        }
+        // 顶点恰好在扫描线上
+        else if (std::abs(a.y - y) < 1e-6) {
+            xs.push_back(a.x);
+        }
+    }
+
+    std::sort(xs.begin(), xs.end());
+
+    // 去重（相邻点太近）
+    xs.erase(std::unique(xs.begin(), xs.end(), [](double a, double b) {
+        return std::abs(a - b) < 1e-5;
+    }), xs.end());
+
+    // 配对：[xs[0],xs[1]], [xs[2],xs[3]], ...
+    std::vector<std::pair<double, double>> segments;
+    for (size_t k = 0; k + 1 < xs.size(); k += 2) {
+        segments.emplace_back(xs[k], xs[k + 1]);
+    }
+    return segments;
+}
+
+// ============================================================
+// 【修改】在外接矩形与实际多边形的交集内生成 S 弯（往复式）路径
+// rect：外接矩形（4角点，用于确定旋转坐标系）
+// polygon：实际多边形边界（用于裁剪扫描线，仅覆盖多边形内部）
 // w：扫描行间距
 // startPos：希望从最近的哪个点开始（通常是螺旋路径末尾）
 // ============================================================
 std::vector<ContourPoint> generateSBendPath(
-        const BoundingRect& rect, double w, const ContourPoint& startPos) {
+        const BoundingRect& rect,
+        const std::vector<ContourPoint>& polygon,
+        double w,
+        const ContourPoint& startPos) {
 
-    if (rect.corners.size() < 4 || w <= 0) return {};
+    if (rect.corners.size() < 4 || w <= 0 || polygon.size() < 3) return {};
 
     double angle  = rect.angle;
     double cosA   = std::cos(-angle), sinA = std::sin(-angle);
@@ -769,21 +817,26 @@ std::vector<ContourPoint> generateSBendPath(
                             p.x * sinInv + p.y * cosInv);
     };
 
-    double minX = std::numeric_limits<double>::max(), maxX = std::numeric_limits<double>::lowest();
-    double minY = std::numeric_limits<double>::max(), maxY = std::numeric_limits<double>::lowest();
-    for (const auto& c : rect.corners) {
-        ContourPoint r = toRot(c);
-        minX = std::min(minX, r.x); maxX = std::max(maxX, r.x);
-        minY = std::min(minY, r.y); maxY = std::max(maxY, r.y);
+    // 将多边形顶点旋转到对齐坐标系
+    std::vector<ContourPoint> rotatedPoly;
+    rotatedPoly.reserve(polygon.size());
+    double minY = std::numeric_limits<double>::max();
+    double maxY = std::numeric_limits<double>::lowest();
+    for (const auto& p : polygon) {
+        ContourPoint r = toRot(p);
+        rotatedPoly.push_back(r);
+        minY = std::min(minY, r.y);
+        maxY = std::max(maxY, r.y);
     }
 
+    // 确定扫描方向（从靠近 startPos 的一侧开始）
     ContourPoint startRot = toRot(startPos);
-
     double y_start = (std::abs(startRot.y - minY) <= std::abs(startRot.y - maxY))
                      ? minY : maxY;
     double y_end   = (y_start == minY) ? maxY : minY;
     double y_step  = (y_end > y_start) ? w : -w;
 
+    // 生成所有扫描行（裁剪到多边形内）
     std::vector<std::vector<ContourPoint>> rows;
     int max_rows = static_cast<int>(std::ceil(std::abs(y_end - y_start) / w)) + 2;
 
@@ -792,18 +845,25 @@ std::vector<ContourPoint> generateSBendPath(
         if (y_step > 0 && y > y_end + 1e-3) break;
         if (y_step < 0 && y < y_end - 1e-3) break;
 
-        rows.push_back({
-            ContourPoint(minX, y),
-            ContourPoint(maxX, y)
-        });
+        // 【关键】将扫描线裁剪到实际多边形内部
+        auto segments = clipScanlineToPolygon(rotatedPoly, y);
+
+        for (const auto& seg : segments) {
+            rows.push_back({
+                ContourPoint(seg.first, y),
+                ContourPoint(seg.second, y)
+            });
+        }
     }
 
     if (rows.empty()) return {};
 
+    // S 弯连接（贪婪选最近端点，自动交替方向）
     std::vector<ContourPoint> path;
     ContourPoint curPos = startRot;
 
     for (auto& row : rows) {
+        if (row.size() < 2) continue;
         double distL = curPos.distance(row[0]);
         double distR = curPos.distance(row[1]);
         if (distL > distR) std::reverse(row.begin(), row.end());
@@ -883,7 +943,7 @@ std::vector<ContourPoint> generateContourSpiralPath(const std::vector<ContourPoi
 
                 // 3. 生成 S 弯路径
                 std::vector<ContourPoint> sBendPath =
-                    generateSBendPath(lastBoundRect, w, sBendStart);
+                    generateSBendPath(lastBoundRect, currContour, w, sBendStart);
 
                 if (!sBendPath.empty()) {
                     ROS_INFO("S-bend path generated with %zu points for narrow last layer.",
