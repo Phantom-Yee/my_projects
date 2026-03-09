@@ -690,6 +690,133 @@ std::vector<ContourPoint> generatePolygonBoustrophedonPath(const std::vector<Con
     return final_path;
 }
 
+// ============================================================
+// 【新增】外接矩形结构体
+// ============================================================
+struct BoundingRect {
+    std::vector<ContourPoint> corners; // 4个角点（世界坐标，顺序：左下、右下、右上、左上）
+    double angle;   // 对齐的旋转角（弧度）
+    double width;   // 矩形宽度
+    double height;  // 矩形高度
+};
+
+// ============================================================
+// 【新增】计算旋转最小外接矩形（对齐多边形第一条边方向）
+// ============================================================
+BoundingRect computeMinBoundingRect(const std::vector<ContourPoint>& polygon) {
+    BoundingRect result;
+    if (polygon.size() < 2) return result;
+
+    double angle = std::atan2(polygon[1].y - polygon[0].y,
+                              polygon[1].x - polygon[0].x);
+    result.angle = angle;
+
+    double cosA = std::cos(-angle), sinA = std::sin(-angle);
+    auto rotPt = [&](const ContourPoint& p) {
+        return ContourPoint(p.x * cosA - p.y * sinA,
+                            p.x * sinA + p.y * cosA);
+    };
+
+    double minX = std::numeric_limits<double>::max(), maxX = std::numeric_limits<double>::lowest();
+    double minY = std::numeric_limits<double>::max(), maxY = std::numeric_limits<double>::lowest();
+    for (const auto& p : polygon) {
+        ContourPoint r = rotPt(p);
+        minX = std::min(minX, r.x); maxX = std::max(maxX, r.x);
+        minY = std::min(minY, r.y); maxY = std::max(maxY, r.y);
+    }
+
+    result.width  = maxX - minX;
+    result.height = maxY - minY;
+
+    std::vector<ContourPoint> cornersRot = {
+        ContourPoint(minX, minY),
+        ContourPoint(maxX, minY),
+        ContourPoint(maxX, maxY),
+        ContourPoint(minX, maxY)
+    };
+
+    double cosInv = std::cos(angle), sinInv = std::sin(angle);
+    for (const auto& c : cornersRot) {
+        result.corners.push_back(ContourPoint(
+            c.x * cosInv - c.y * sinInv,
+            c.x * sinInv + c.y * cosInv
+        ));
+    }
+    return result;
+}
+
+// ============================================================
+// 【新增】在外接矩形内生成 S 弯（往复式）路径
+// rect：外接矩形（4角点）
+// w：扫描行间距
+// startPos：希望从最近的哪个点开始（通常是螺旋路径末尾）
+// ============================================================
+std::vector<ContourPoint> generateSBendPath(
+        const BoundingRect& rect, double w, const ContourPoint& startPos) {
+
+    if (rect.corners.size() < 4 || w <= 0) return {};
+
+    double angle  = rect.angle;
+    double cosA   = std::cos(-angle), sinA = std::sin(-angle);
+    double cosInv = std::cos(angle),  sinInv = std::sin(angle);
+
+    auto toRot = [&](const ContourPoint& p) {
+        return ContourPoint(p.x * cosA - p.y * sinA,
+                            p.x * sinA + p.y * cosA);
+    };
+    auto toWorld = [&](const ContourPoint& p) {
+        return ContourPoint(p.x * cosInv - p.y * sinInv,
+                            p.x * sinInv + p.y * cosInv);
+    };
+
+    double minX = std::numeric_limits<double>::max(), maxX = std::numeric_limits<double>::lowest();
+    double minY = std::numeric_limits<double>::max(), maxY = std::numeric_limits<double>::lowest();
+    for (const auto& c : rect.corners) {
+        ContourPoint r = toRot(c);
+        minX = std::min(minX, r.x); maxX = std::max(maxX, r.x);
+        minY = std::min(minY, r.y); maxY = std::max(maxY, r.y);
+    }
+
+    ContourPoint startRot = toRot(startPos);
+
+    double y_start = (std::abs(startRot.y - minY) <= std::abs(startRot.y - maxY))
+                     ? minY : maxY;
+    double y_end   = (y_start == minY) ? maxY : minY;
+    double y_step  = (y_end > y_start) ? w : -w;
+
+    std::vector<std::vector<ContourPoint>> rows;
+    int max_rows = static_cast<int>(std::ceil(std::abs(y_end - y_start) / w)) + 2;
+
+    for (int i = 0; i < max_rows; i++) {
+        double y = y_start + i * y_step;
+        if (y_step > 0 && y > y_end + 1e-3) break;
+        if (y_step < 0 && y < y_end - 1e-3) break;
+
+        rows.push_back({
+            ContourPoint(minX, y),
+            ContourPoint(maxX, y)
+        });
+    }
+
+    if (rows.empty()) return {};
+
+    std::vector<ContourPoint> path;
+    ContourPoint curPos = startRot;
+
+    for (auto& row : rows) {
+        double distL = curPos.distance(row[0]);
+        double distR = curPos.distance(row[1]);
+        if (distL > distR) std::reverse(row.begin(), row.end());
+
+        for (const auto& p : row) {
+            path.push_back(toWorld(p));
+        }
+        curPos = row.back();
+    }
+
+    return path;
+}
+
 // 等高线螺旋式全覆盖路径规划（新算法）
 std::vector<ContourPoint> generateContourSpiralPath(const std::vector<ContourPoint>& polygon, double w, 
                                                     double min_optimization_distance = 0.3, 
@@ -730,9 +857,52 @@ std::vector<ContourPoint> generateContourSpiralPath(const std::vector<ContourPoi
         bool isLastLayer = (layer == contours.size() - 1);
         
         if (isLastLayer) {
-            // 最后一层：简单闭合
-            std::vector<ContourPoint> layerPath = generateContourPath(currContour, currentActualStartIdx, false, ContourPoint(0,0), -1);
-            fullPath.insert(fullPath.end(), layerPath.begin(), layerPath.end());
+            // ============================================================
+            // 【修改】最后一层：判断是否为"较窄区域"
+            // 若面积比 < narrow_area_threshold，则生成外接四边形并以 S 弯覆盖
+            // ============================================================
+            double lastArea     = polygonArea(currContour);
+            double originalArea = polygonArea(contours[0]);
+            const double narrow_area_threshold = 0.25; // 可调：< 25% 原始面积触发 S 弯
+
+            bool isNarrow = (originalArea > 1e-6 &&
+                             (lastArea / originalArea < narrow_area_threshold ||
+                              currContour.size() < 4));
+
+            if (isNarrow) {
+                ROS_INFO("Last layer is narrow (area ratio=%.3f). Switching to S-bend path.",
+                         lastArea / originalArea);
+
+                // 1. 计算最后一层的外接矩形
+                BoundingRect lastBoundRect = computeMinBoundingRect(currContour);
+
+                // 2. S 弯起点：螺旋路径当前末尾（或最后一层起始点）
+                ContourPoint sBendStart = fullPath.empty()
+                    ? currContour[currentActualStartIdx % (int)currContour.size()]
+                    : fullPath.back();
+
+                // 3. 生成 S 弯路径
+                std::vector<ContourPoint> sBendPath =
+                    generateSBendPath(lastBoundRect, w, sBendStart);
+
+                if (!sBendPath.empty()) {
+                    ROS_INFO("S-bend path generated with %zu points for narrow last layer.",
+                             sBendPath.size());
+                    fullPath.insert(fullPath.end(), sBendPath.begin(), sBendPath.end());
+                } else {
+                    ROS_WARN("S-bend path empty, fallback to simple closed path.");
+                    std::vector<ContourPoint> layerPath =
+                        generateContourPath(currContour, currentActualStartIdx,
+                                            false, ContourPoint(0, 0), -1);
+                    fullPath.insert(fullPath.end(), layerPath.begin(), layerPath.end());
+                }
+            } else {
+                // 非窄区域：原始简单闭合逻辑
+                std::vector<ContourPoint> layerPath =
+                    generateContourPath(currContour, currentActualStartIdx,
+                                        false, ContourPoint(0, 0), -1);
+                fullPath.insert(fullPath.end(), layerPath.begin(), layerPath.end());
+            }
             break;
         }
         

@@ -17,8 +17,8 @@
         
 <!--                              参数调节                      -->
         <!-- <param name="BoustrophedonSTC/boundary_points" value="0,0;-70,26;-57,55;29,75;" />  //作业区域坐标点 格式x,y; -->
-        <param name="BoustrophedonSTC/boundary_points" value="107.743040354,30.692300781;107.743312041,30.691669738;107.743620438,30.691784357;107.743833671,30.692563650;" /> 
-         <!-- <param name="BoustrophedonSTC/boundary_points" value="0,0;250,50;300,180;220,300;80,290;40,170;" /> -->
+        <!-- <param name="BoustrophedonSTC/boundary_points" value="107.743040354,30.692300781;107.743312041,30.691669738;107.743620438,30.691784357;107.743833671,30.692563650;" />  -->
+        <!-- <param name="BoustrophedonSTC/boundary_points" value="0,0;250,50;300,180;220,300;80,290;40,170;" /> -->
 <!-- <param name="BoustrophedonSTC/boundary_points" 
        value="106.279992990,29.406326770;106.280100242,29.406496264;106.280250242,29.406426264;106.280180242,29.406256264;"/> -->
 <!-- <param name="BoustrophedonSTC/boundary_points" 
@@ -28,8 +28,8 @@
          <!-- <param name="BoustrophedonSTC/boundary_points" value="107.742000000,30.693000000;107.744000000,30.693000000;107.743000000,30.691000000;" /> -->
          <!-- <param name="BoustrophedonSTC/boundary_points" value="107.743000000,30.693000000;107.744000000,30.692500000;107.743800000,30.691500000;107.742200000,30.691500000;107.742000000,30.692500000;" /> -->
          <!-- <param name="BoustrophedonSTC/boundary_points" value="106.279992990,29.406326770;106.279992990,29.406596264;106.280200242,29.406596264;106.280200242,29.406326770;" /> -->
-         <!-- <param name="BoustrophedonSTC/boundary_points" 
-       value="106.279992990,29.406326770;106.280200242,29.406326770;106.280200242,29.406596264;106.279992990,29.406596264;" /> -->
+         <param name="BoustrophedonSTC/boundary_points" 
+       value="106.279992990,29.406326770;106.280200242,29.406326770;106.280200242,29.406596264;106.279992990,29.406596264;" />
 
         <param name="BoustrophedonSTC/path_pattern" value="contour_spiral " />       //路径选择 牛耕式：boustrophedon 方形内螺旋：inner_spiral 多边形内螺旋：contour_spiral 多边形往复式：polygon_boustrophedon
         <param name="BoustrophedonSTC/use_custom_boundary" value="true" />
