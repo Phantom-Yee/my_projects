@@ -752,7 +752,9 @@ BoundingRect computeMinBoundingRect(const std::vector<ContourPoint>& polygon) {
 // startPos：希望从最近的哪个点开始（通常是螺旋路径末尾）
 // ============================================================
 std::vector<ContourPoint> generateSBendPath(
-        const BoundingRect& rect, double w, const ContourPoint& startPos) {
+        const BoundingRect& rect,
+        const std::vector<ContourPoint>& clipPolygon,
+        double w, const ContourPoint& startPos) {
 
     if (rect.corners.size() < 4 || w <= 0) return {};
 
@@ -777,6 +779,43 @@ std::vector<ContourPoint> generateSBendPath(
         minY = std::min(minY, r.y); maxY = std::max(maxY, r.y);
     }
 
+    // Transform clip polygon vertices to rotated coordinate system
+    std::vector<ContourPoint> clipRot;
+    if (!clipPolygon.empty()) {
+        clipRot.reserve(clipPolygon.size());
+        for (const auto& p : clipPolygon) {
+            clipRot.push_back(toRot(p));
+        }
+    }
+
+    // For a given scan-line y, compute x-intercepts with the clip polygon boundary
+    // using the standard scanline algorithm, then clip the row to [x_in, x_out] intervals.
+    auto clipRowToPolygon = [&](double y, double rowMinX, double rowMaxX)
+            -> std::vector<std::pair<double, double>> {
+        int n = static_cast<int>(clipRot.size());
+        std::vector<double> xs;
+        for (int i = 0; i < n; i++) {
+            const ContourPoint& a = clipRot[i];
+            const ContourPoint& b = clipRot[(i + 1) % n];
+            double ay = a.y, by = b.y;
+            // Edge crosses y?
+            if ((ay <= y && by > y) || (by <= y && ay > y)) {
+                double t = (y - ay) / (by - ay);
+                xs.push_back(a.x + t * (b.x - a.x));
+            }
+        }
+        std::sort(xs.begin(), xs.end());
+        std::vector<std::pair<double, double>> intervals;
+        for (int i = 0; i + 1 < static_cast<int>(xs.size()); i += 2) {
+            double lo = std::max(xs[i],     rowMinX);
+            double hi = std::min(xs[i + 1], rowMaxX);
+            if (hi > lo + 1e-6) {
+                intervals.emplace_back(lo, hi);
+            }
+        }
+        return intervals;
+    };
+
     ContourPoint startRot = toRot(startPos);
 
     double y_start = (std::abs(startRot.y - minY) <= std::abs(startRot.y - maxY))
@@ -792,10 +831,21 @@ std::vector<ContourPoint> generateSBendPath(
         if (y_step > 0 && y > y_end + 1e-3) break;
         if (y_step < 0 && y < y_end - 1e-3) break;
 
-        rows.push_back({
-            ContourPoint(minX, y),
-            ContourPoint(maxX, y)
-        });
+        if (!clipRot.empty()) {
+            // Clip this scan line against the polygon
+            auto intervals = clipRowToPolygon(y, minX, maxX);
+            for (const auto& interval : intervals) {
+                rows.push_back({
+                    ContourPoint(interval.first,  y),
+                    ContourPoint(interval.second, y)
+                });
+            }
+        } else {
+            rows.push_back({
+                ContourPoint(minX, y),
+                ContourPoint(maxX, y)
+            });
+        }
     }
 
     if (rows.empty()) return {};
@@ -863,7 +913,7 @@ std::vector<ContourPoint> generateContourSpiralPath(const std::vector<ContourPoi
             // ============================================================
             double lastArea     = polygonArea(currContour);
             double originalArea = polygonArea(contours[0]);
-            const double narrow_area_threshold = 0.25; // 可调：< 25% 原始面积触发 S 弯
+            const double narrow_area_threshold = 0.50; // 对大体积农机更早触发 S 弯
 
             bool isNarrow = (originalArea > 1e-6 &&
                              (lastArea / originalArea < narrow_area_threshold ||
@@ -873,17 +923,20 @@ std::vector<ContourPoint> generateContourSpiralPath(const std::vector<ContourPoi
                 ROS_INFO("Last layer is narrow (area ratio=%.3f). Switching to S-bend path.",
                          lastArea / originalArea);
 
-                // 1. 计算最后一层的外接矩形
-                BoundingRect lastBoundRect = computeMinBoundingRect(currContour);
+                // 1. 基于倒数第二层轮廓（prevContour）计算外接矩形，覆盖上一层螺旋内边界围成的整个剩余区域
+                // 若只有一层则退化为使用当前层
+                const std::vector<ContourPoint>& rectSource =
+                    (layer > 0) ? contours[layer - 1] : currContour;
+                BoundingRect lastBoundRect = computeMinBoundingRect(rectSource);
 
                 // 2. S 弯起点：螺旋路径当前末尾（或最后一层起始点）
                 ContourPoint sBendStart = fullPath.empty()
                     ? currContour[currentActualStartIdx % (int)currContour.size()]
                     : fullPath.back();
 
-                // 3. 生成 S 弯路径
+                // 3. 生成 S 弯路径（裁剪边界也使用 prevContour，不会超出已走过的螺旋区域）
                 std::vector<ContourPoint> sBendPath =
-                    generateSBendPath(lastBoundRect, w, sBendStart);
+                    generateSBendPath(lastBoundRect, rectSource, w, sBendStart);
 
                 if (!sBendPath.empty()) {
                     ROS_INFO("S-bend path generated with %zu points for narrow last layer.",
