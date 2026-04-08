@@ -1,0 +1,14 @@
+#------------------------------
+#任务请求
+#------------------------------
+uint8                   Task_Control        = 1    #农机作业任务
+uint8                   NewPathMission      = 2    #避障任务操作
+
+uint8     task_type      #任务id
+float64   s_start        #任务区间起始
+float64   s_end          #任务区间结束
+float64   info           #任务信息
+float64   info_2         #任务信息2
+---
+bool isSuccess
+

@@ -1,0 +1,8 @@
+prefix=/home/ragen/ros_ws/CCPP_Server_7/devel
+
+Name: gnss_gridmap
+Description: Description of gnss_gridmap
+Version: 0.0.0
+Cflags: -I/home/ragen/ros_ws/CCPP_Server_7/src/gnss_gridmap/include
+Libs: -L${prefix}/lib -lgnss_gridmap
+Requires: geometry_msgs nav_msgs roscpp rospy std_msgs custom_msgs full_coverage_path_planner

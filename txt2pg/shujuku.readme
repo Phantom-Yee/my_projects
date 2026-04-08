@@ -1,0 +1,24 @@
+psql -h 127.0.0.1 -p 5432 -U sde -d sde
+
+CREATE TABLE reference_link_ccppedge (
+    objectid INTEGER NOT NULL, -- 唯一标识
+    id INTEGER, -- 路径的ID
+    turn_flag INTEGER, -- 转向标志
+    velocity INTEGER, -- 速度
+    scenes INTEGER, -- 场景信息
+    lane_num INTEGER, -- 车道数量
+    start_x NUMERIC(38,8), -- 起点的X坐标
+    start_y NUMERIC(38,8), -- 起点的Y坐标
+    end_x NUMERIC(38,8), -- 终点的X坐标
+    end_y NUMERIC(38,8) -- 终点的Y坐标
+);
+
+CREATE TABLE reference_linkpoints_ccppedge (
+    objectid INTEGER NOT NULL, -- 唯一标识
+    id INTEGER, -- 关联到路径的ID
+    orig_fid INTEGER, -- 原始数据ID
+    pointorder INTEGER, -- 点的顺序
+    point_x NUMERIC(38,8), -- 点的X坐标
+    point_y NUMERIC(38,8) -- 点的Y坐标
+);
+
